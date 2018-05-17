@@ -18,7 +18,7 @@ The objective of this project is to build a connector between OTRS and Thehive_p
 
 * you also need 2 additional dynamic fields:
     - __TLP__: dropdown list with keys and values set to TLP levels i.e TLP:WHITE to TLP:RED
-	- Observable: text area to store observables (one per line). you may slect another existing dynamic field for this (see below)
+	- Observable: text area to store observables (one per line). you may select another existing dynamic field for this in configuration file(see below)
 
 * copy files in /opt/otrs/Kernel/GenericInterface/Invoker/TheHive/
 	- thehive.sh
@@ -49,7 +49,7 @@ The objective of this project is to build a connector between OTRS and Thehive_p
 		For last one, you have to list the Priority levels in OTRS and decide to which level to map in TheHive (Low=1, Medium=2, High=3)
 
 * Create a job in generic agent to launch the script /opt/otrs/Kernel/GenericInterface/Invoker/TheHive/thehive.sh
-    - if successful, then a case is created in TheHive and the case ID is set in OTRS TheHivecaseId field
+    - if successful, then a case is created in TheHive and the case ID is set in OTRS TheHiveCaseId field (and TheHiveAction set back to A0)
     - there are some logging (to be improved) in /opt/otrs/var/log/
 
 
