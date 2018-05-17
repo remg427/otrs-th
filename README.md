@@ -13,7 +13,7 @@ The objective of this project is to build a connector between OTRS and Thehive_p
 	    * Key: __A0__ Value: Do nothing
 		* Key: __A1__ Value: Create case in TheHive 
 	- TheHiveCaseTemplate: dropdown list with the cases you have created in TheHive
-	- TheHivecaseId: text field
+	- TheHiveCaseId: text field
 	- TheHiveTags: text field to provide a list of tags (comma , separated)
 
 * you also need 2 additional dynamic fields:
