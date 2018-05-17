@@ -26,6 +26,7 @@ The objective of this project is to build a connector between OTRS and Thehive_p
 	- otrs2thehive.conf
 * edit thehive.sh and adapt as required
 * edit otrs2thehive.conf
+
 	[pyotrs]
 	PYOTRS_BASEURL=http://127.0.0.1
 	PYOTRS_USERNAME=root@localhost    <=== needs to be admin
