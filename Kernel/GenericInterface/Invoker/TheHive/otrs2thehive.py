@@ -127,7 +127,8 @@ def submitTheHive(newCase):
 	#Modify default value with data from OTRS ticket
 	caseTitle    = newCase['TicketNumber'] + ': ' + newCase['Title']
 	caseSeverity = config['thehiveSeverity'][newCase['Priority']]
-
+	caseTags.append('ticket:id='+newCase['TicketID'])
+	caseTags.append('ticket:ref='+newCase['TicketNumber'])
 	
 	if 'DynamicField' in newCase:
 		for DF in newCase['DynamicField']:
@@ -266,11 +267,11 @@ def main():
 			if thehiveNoCase:  # Valid request to create a case in TheHive
 				TheHiveCaseId = submitTheHive(otrsCase)
 				if TheHiveCaseId > 0:
-					df = DynamicField("TheHiveAction", "A0")  # change TheHiveAction dynamic field back to 'Do nothing'
+					df = DynamicField("TheHiveCaseId", str(TheHiveCaseId))
 					client.ticket_update(TID, dynamic_fields=[df])
 				else:
 					print('[ERROR] The case could not be created in TheHive.')			
-			df = DynamicField("TheHiveCaseId", str(TheHiveCaseId))
+			df = DynamicField("TheHiveAction", "A0")  # change TheHiveAction dynamic field back to 'Do nothing'
 			client.ticket_update(TID, dynamic_fields=[df])
 	else:
 		print('[ERROR] Dynamic fields not collected - check they are activated for tickets.')
