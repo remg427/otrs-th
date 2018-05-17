@@ -28,23 +28,25 @@ The objective of this project is to build a connector between OTRS and Thehive_p
 * edit otrs2thehive.conf
 
 	[pyotrs]
-	PYOTRS_BASEURL=http://127.0.0.1
-	PYOTRS_USERNAME=root@localhost    <=== needs to be admin
-	PYOTRS_PASSWORD=changeme
-	PYOTRS_HTTPS_VERIFY=True
-	PYOTRS_CA_CERT_BUNDLE=
+
+		PYOTRS_BASEURL=http://127.0.0.1
+		PYOTRS_USERNAME=root@localhost    <=== needs to be admin
+		PYOTRS_PASSWORD=changeme
+		PYOTRS_HTTPS_VERIFY=True
+		PYOTRS_CA_CERT_BUNDLE=
 
 	[thehive]
-	THEHIVE_BASEURL=http://172.22.0.3:9000
-	THEHIVE_APIKEY=kV246jl05vzgXvamzsNZDnQcBHjRshh5
-	THEHIVE_TLS_CHECK=False
-	THEHIVE_CASETAGS=otrs   <= here you can list tags e.g. tag1,tag2,tag3; they will be added to all cases
-	THEHIVE_TEMPLATE=OTRS   <= default case template to use
-	THEHIVE_TLP=TLP:RED     <= default TLP level
-	THEHIVE_OBSERVABLE_DF=Observable   <= or another dynamic fields where to store observables in OTRS
-	THEHIVE_CUSTOMTAGS_DF=TheHiveTags  <= a custom list of tags can be passed for each ticket
-	THEHIVE_SEVERITY={'1 very low': 1, '2 low': 1, '3 normal': 1, '4 high': 2, '5 very high': 3}
-	For last one, you have to list the Priority levels in OTRS and decide to which level to map in TheHive (Low=1, Medium=2, High=3)
+
+		THEHIVE_BASEURL=http://172.22.0.3:9000
+		THEHIVE_APIKEY=kV246jl05vzgXvamzsNZDnQcBHjRshh5
+		THEHIVE_TLS_CHECK=False
+		THEHIVE_CASETAGS=otrs   <= here you can list tags e.g. tag1,tag2,tag3; they will be added to all cases
+		THEHIVE_TEMPLATE=OTRS   <= default case template to use
+		THEHIVE_TLP=TLP:RED     <= default TLP level
+		THEHIVE_OBSERVABLE_DF=Observable   <= or another dynamic fields where to store observables in OTRS
+		THEHIVE_CUSTOMTAGS_DF=TheHiveTags  <= a custom list of tags can be passed for each ticket
+		THEHIVE_SEVERITY={'1 very low': 1, '2 low': 1, '3 normal': 1, '4 high': 2, '5 very high': 3}
+		For last one, you have to list the Priority levels in OTRS and decide to which level to map in TheHive (Low=1, Medium=2, High=3)
 
 * Create a job in generic agent to launch the script /opt/otrs/Kernel/GenericInterface/Invoker/TheHive/thehive.sh
     - if successful, then a case is created in TheHive and the case ID is set in OTRS TheHivecaseId field
