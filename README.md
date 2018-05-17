@@ -3,7 +3,7 @@ Caution: this is Work in Progress - this version is released as the first one wo
 
 The objective of this project is to build a connector between OTRS and Thehive_projet
 
-# OTRS to TheHive
+# [OTRS](https://otrs.com/) to [TheHive](https://thehive-project.org/)
 ## Installation
 * install Python3
 * install [PyOTRS](https://pypi.python.org/pypi/PyOTRS)
