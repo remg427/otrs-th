@@ -203,7 +203,7 @@ def main():
 
 	# Collect args fom call and write them to log file
 	try:
-		_OTRS = os.environ['HOME']
+		_OTRS = sys.argv[1]
 		TID = sys.argv[2]
 
 		# open thehive.conf
