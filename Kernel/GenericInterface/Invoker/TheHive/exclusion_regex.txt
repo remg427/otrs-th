@@ -1,0 +1,4 @@
+.*otrs\.com
+otrs\.org
+github\.io
+github\.com

@@ -26,7 +26,8 @@ try:
 	from pyotrs import Article, Client, Ticket, DynamicField
 
 except:
-	print("[ERROR] Please install PyOTRS (REST version).")
+	log_ts = datetime.datetime.now()
+	print("%s [ERROR] Please install PyOTRS (REST version)." % log_ts)
 	sys.exit(1)
 
 try:
@@ -34,7 +35,8 @@ try:
 	from thehive4py.models import Case, CaseTask, CaseObservable, CustomFieldHelper
 	from thehive4py.models import Alert, AlertArtifact
 except:
-	print("[ERROR] Please install thehive4py.")
+	log_ts = datetime.datetime.now()
+	print("%s [ERROR] Please install thehive4py." % log_ts)
 	sys.exit(1)
 
 __author__     = "Remi Seguy"
@@ -47,20 +49,22 @@ __name__       = "otrs2thehive"
 # Default configuration 
 args = ''
 config = {
-	'imapHost'        : '',
-	'imapPort'        : '',
-	'imapUser'        : '',
-	'imapPassword'    : '',
-	'imapFolder'      : '',
-	'imapExpunge'     : False,
-	'thehiveURL'      : '',
-	'thehiveKey'      : '',
-	'caseTLP'         : '',
-	'caseTags'        : ['email'],
-	'caseTasks'       : [],
-	'caseFiles'       : [],
-	'caseTemplate'    : '',
-	'caseObservables' : False,
+	'otrsURL'           : '',
+	'otrsUser'          : '',
+	'otrsPassword'      : '',
+	'otrsTLSCheck'      : True,
+	'otrsCert'          : '',
+
+	'thehiveURL'        : '',
+	'thehiveKey'        : '',
+	'thehiveTLP'        : 'TLP:RED',
+	'caseObservables'   : False,
+	'thehiveTLSCheck'   : True, 
+	'thehiveCaseTags'   : '', 
+	'thehiveTemplate'   : '', 
+	'thehiveObservable' : '', 
+	'thehiveCustomTags' : '',
+	'thehiveSeverity'   : ''
 }
 
 def slugify(s):
@@ -98,10 +102,48 @@ def searchObservables(buffer, observables):
 			# Bug: Avoid duplicates!
 			if not {'type': o['type'], 'value': match } in observables:
 				observables.append({ 'type': o['type'], 'value': match })
-				print('[INFO] Found observable %s: %s' % (o['type'], match))
+				if log_level > 1:
+					log_ts = datetime.datetime.now()
+					print('%s [INFO] Found observable %s: %s' % (log_ts, o['type'], match))
 			else:
-				print('[INFO] Ignoring duplicate observable: %s' % match)
+				if log_level > 1:
+					log_ts = datetime.datetime.now()
+					print('%s [INFO] Ignoring duplicate observable: %s' % (log_ts, match))
 	return observables
+
+def excludeObservables(exclusion_list, observables):
+	newObservables = []
+	if log_level == 3:
+		log_ts = datetime.datetime.now()
+		print('%s [DEBUG] observable list contains %s before exclusion' % (log_ts, str(observables)))
+
+	for o in observables:
+		noMatch = True
+		if log_level == 3:
+			log_ts = datetime.datetime.now()
+			print('%s [DEBUG] Found observable type: %s and value: %s' % (log_ts, o['type'], o['value']))
+
+		for e in exclusion_list:
+			if noMatch:
+				if log_level == 3:
+					log_ts = datetime.datetime.now()
+					print('%s [DEBUG] testing regex  %s ' % (log_ts, e))
+				if re.search(e, o['value']):
+					if log_level > 1:
+						log_ts = datetime.datetime.now()
+						print('%s [INFO] Found match on %s for value: %s, removing from observables' % (log_ts, e, o['value']))
+					noMatch = False
+
+		if noMatch:
+			newObservables.append(o)
+#		#if log_level > 1:
+#			log_ts = datetime.datetime.now()
+#			print('%s [INFO] no match for value: %s, kept in observables' % (log_ts, o['value']))
+	if log_level == 3:
+		log_ts = datetime.datetime.now()
+		print('%s [DEBUG] observable list contains %s after exclusion' % (log_ts, str(newObservables)))
+
+	return newObservables
 
 def submitTheHive(newCase):
 
@@ -130,6 +172,23 @@ def submitTheHive(newCase):
 	caseTags.append('ticket:id='+newCase['TicketID'])
 	caseTags.append('ticket:ref='+newCase['TicketNumber'])
 	
+	if 'Article' in newCase:
+		for article in newCase['Article']:
+			if article['SenderType'] != 'system' :
+				caseDescription = caseDescription + caseDelims
+				caseDelims = '\n\n____\n\n'
+				if 'CreateTime' in article:   #OTRS 6.x
+					caseDescription = caseDescription + article['CreateTime'] + ' - '
+				elif 'Created' in article:    #OTRS 5.x
+					caseDescription = caseDescription + article['Created'] + ' - '
+				caseDescription = caseDescription + 'From: ' + article['From'] + '\n\n'
+				caseDescription = caseDescription + article['Body']
+				caseObservables = searchObservables(article['Body'], caseObservables)
+		# if some observables have been found in articles, check if they have to be excluded
+		if caseObservables:
+			caseObservables = excludeObservables(exclusion, caseObservables)
+
+
 	if 'DynamicField' in newCase:
 		for DF in newCase['DynamicField']:
 			if DF['Name'] == 'TLP':
@@ -145,18 +204,6 @@ def submitTheHive(newCase):
 				if DF['Value']:
 					for v in DF['Value'].split(','):
 						caseTags.append(v)
-	if 'Article' in newCase:
-		for article in newCase['Article']:
-			if article['SenderType'] != 'system' :
-				caseDescription = caseDescription + caseDelims
-				caseDelims = '\n\n____\n\n'
-				if 'CreateTime' in article:   #OTRS 6.x
-					caseDescription = caseDescription + article['CreateTime'] + ' - '
-				elif 'Created' in article:    #OTRS 5.x
-					caseDescription = caseDescription + article['Created'] + ' - '
-				caseDescription = caseDescription + 'From: ' + article['From'] + '\n\n'
-				caseDescription = caseDescription + article['Body']
-				caseObservables = searchObservables(article['Body'], caseObservables)
 
 	# Prepare case structure
 	case = Case(title        = caseTitle,
@@ -173,7 +220,8 @@ def submitTheHive(newCase):
 	if response.status_code == 201:
 		newID = response.json()['id']
 		caseId = response.json()['caseId']
-		print('[INFO] Created case %s' % caseId)
+		log_ts = datetime.datetime.now()
+		print('%s [INFO] Created case %s' % (log_ts, caseId))
 		#
 		# Add observables provided in the DynamicField Observable if any
 		#
@@ -189,40 +237,63 @@ def submitTheHive(newCase):
 					)
 				response = api.create_case_observable(newID, observable)
 				if response.status_code == 201:
-					print('[INFO] Added observable %s: %s to case ID %s' % (o['type'], o['value'], newID))
+					if log_level > 1:
+						log_ts = datetime.datetime.now()
+						print('%s [INFO] Added observable %s: %s to case ID %s' % (log_ts, o['type'], o['value'], newID))
 				else:
-					print('[WARNING] Cannot add observable %s: %s - %s (%s)' % (o['type'], o['value'], response.status_code, response.text))
+					if log_level > 0:
+						log_ts = datetime.datetime.now()
+						print('%s [WARNING] Cannot add observable %s: %s - %s (%s)' % (log_ts, o['type'], o['value'], response.status_code, response.text))
 	else:
-		print('[ERROR] Cannot create case: %s (%s)' % (response.status_code, response.text))
+		log_ts = datetime.datetime.now()
+		print('%s [ERROR] Cannot create case: %s (%s)' % (log_ts, response.status_code, response.text))
 		return -1
 	return int(caseId)
 
 def main():
 	global args
 	global config
+	global log_level
+	global exclusion
 
-	# Collect args fom call and write them to log file
+
+	# Collect args fom call and open log file
 	try:
 		_OTRS = sys.argv[1]
 		TID = sys.argv[2]
+		log_level = 0
 
 		# open thehive.conf
 		config_filename = _OTRS + '/Kernel/GenericInterface/Invoker/TheHive/otrs2thehive.conf'
 		if not os.path.isfile(config_filename):
-			print('[ERROR] Configuration file %s is not readable.' % config_filename)
+			log_ts = datetime.datetime.now()
+			print('%s [ERROR] Configuration file %s is not readable.' % (log_ts, config_filename))
 			sys.exit(1);
 		c = configparser.ConfigParser()
-		c.sections()
 		c.read(config_filename)
 
 	except OSError as e:
-		print('[ERROR] Cannot read config file %s: %s' % (config_filename, e.errno))
+		log_ts = datetime.datetime.now()
+		print('%s [ERROR] Cannot read config file %s: %s' % (log_ts, config_filename, e.errno))
 		sys.exit(1)
 
 	# Generate args
 	config = {}
+	# Global settings
+	if c.has_option('global', 'LOG_LEVEL'):
+		log_level = c.getint('global', 'LOG_LEVEL')
+	else:
+		log_ts = datetime.datetime.now()
+		print('%s [ERROR] Configuration file has no option LOG_LEVEL.' % log_ts)
+
+
 	#OTRS config
-	config['otrsURL']          = c.get('pyotrs','PYOTRS_BASEURL')
+	if c.has_option('pyotrs','PYOTRS_BASEURL'):
+		config['otrsURL']          = c.get('pyotrs','PYOTRS_BASEURL')
+	else:
+		log_ts = datetime.datetime.now()
+		print('%s [ERROR] Configuration file has no option PYOTRS_BASEURL.' % log_ts)
+
 	config['otrsUser']         = c.get('pyotrs','PYOTRS_USERNAME')
 	config['otrsPassword']     = c.get('pyotrs','PYOTRS_PASSWORD')
 	config['otrsTLSCheck']     = c.getboolean('pyotrs','PYOTRS_HTTPS_VERIFY')
@@ -239,6 +310,39 @@ def main():
 	config['thehiveCustomTags']= c.get('thehive', 'THEHIVE_CUSTOMTAGS_DF')
 	config['thehiveSeverity']  = eval(c.get('thehive', 'THEHIVE_SEVERITY'))
 
+	exclusion = []
+	exclusion_filename = ''
+	if c.has_option('thehive', 'THEHIVE_NOTOBS_REX'):
+		exclusion_filename = c.get('thehive', 'THEHIVE_NOTOBS_REX')
+	else:
+		log_ts = datetime.datetime.now()
+		print('%s [ERROR] Cannot find option NOTOBS_REX in section thehive' % log_ts)
+
+	try:
+		if not os.path.isfile(exclusion_filename) and log_level > 0:
+			log_ts = datetime.datetime.now()
+			print('%s [WARNING] file %s is not readable. no exclusion in observables based on regex' % (log_ts, exclusion_filename))
+		else:
+			# open exclusion_filename
+			with open(exclusion_filename) as exclusion_file:
+				# collect the list of regex to exclude observables from the extracted list
+				exclusion = exclusion_file.read().splitlines() 
+			if log_level == 3:
+				log_ts = datetime.datetime.now()
+				print('%s [DEBUG] read file %s and imported %s in exclusion list' % (log_ts, exclusion_filename, str(exclusion)))
+			elif log_level == 2:
+				log_ts = datetime.datetime.now()
+				print('%s [INFO] read file %s and imported %s strings in exclusion list' % (log_ts, exclusion_filename, len(exclusion)))
+
+	except OSError as e:
+		log_ts = datetime.datetime.now()
+		print('%s [ERROR] Cannot read config file section NOTOBS_REX: %s' % (log_ts, e.errno))
+		sys.exit(1)
+
+
+
+
+
 	try:
 		#Get OTRS ticket 
 		client = Client(config['otrsURL'], config['otrsUser'], config['otrsPassword'], https_verify=config['otrsTLSCheck'])
@@ -246,13 +350,15 @@ def main():
 		t = client.ticket_get_by_id(TID, articles=True, attachments=True, dynamic_fields=True).to_dct()
 
 	except:
-		print('[ERROR] Cannot get OTRS ticket content for Ticket ID %s using URL %s and User: %s' % (TID, config['otrsURL'], config['otrsUser']))
+		print('%s [ERROR] Cannot get OTRS ticket content for Ticket ID %s using URL %s and User: %s' % (log_ts, TID, config['otrsURL'], config['otrsUser']))
 		sys.exit(1)
 
 	#Build newCase dict
 	otrsCase = {}
 	otrsCase = t['Ticket']
-	print(json.dumps(t, indent=4))
+	if log_level > 2:
+		log_ts = datetime.datetime.now()
+		print("%s [DEBUG] %s" % (log_ts, str(json.dumps(t, indent=4))))
 
 	if 'DynamicField' in otrsCase:
 		thehiveNoCase = False
@@ -270,11 +376,13 @@ def main():
 					df = DynamicField("TheHiveCaseId", str(TheHiveCaseId))
 					client.ticket_update(TID, dynamic_fields=[df])
 				else:
-					print('[ERROR] The case could not be created in TheHive.')			
+					log_ts = datetime.datetime.now()
+					print('%s [ERROR] The case could not be created in TheHive.' % log_ts)			
 			df = DynamicField("TheHiveAction", "A0")  # change TheHiveAction dynamic field back to 'Do nothing'
 			client.ticket_update(TID, dynamic_fields=[df])
 	else:
-		print('[ERROR] Dynamic fields not collected - check they are activated for tickets.')
+		log_ts = datetime.datetime.now()
+		print('%s [ERROR] Dynamic fields not collected - check they are activated for tickets.' % log_ts)
 	return
 
 if __name__ == 'otrs2thehive':
