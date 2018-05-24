@@ -41,7 +41,7 @@ except:
 
 __author__     = "Remi Seguy"
 __license__    = "GPLv3"
-__version__    = "1.0.2"
+__version__    = "1.0.3"
 __maintainer__ = "Remi Seguy"
 __email__      = "remg427@gmail.com"
 __name__       = "otrs2thehive"
@@ -207,10 +207,10 @@ def submitTheHive(newCase, exclusion):
 				caseDescription = caseDescription + caseDelims
 				caseDelims = '\n\n____\n\n'
 				if 'CreateTime' in article:   #OTRS 6.x
-					caseDescription = caseDescription + article['CreateTime'] + ' - '
+					caseDescription = caseDescription + '**' + article['CreateTime'] + ' - '
 				elif 'Created' in article:    #OTRS 5.x
-					caseDescription = caseDescription + article['Created'] + ' - '
-				caseDescription = caseDescription + 'From: ' + article['From'] + '\n\n'
+					caseDescription = caseDescription + '**' + article['Created'] + ' - '
+				caseDescription = caseDescription + 'From: ' + article['From'] + '**\n\n'
 				caseDescription = caseDescription + article['Body']
 				caseObservables = searchObservables(article['Body'], caseObservables, exclusion)
 
@@ -269,11 +269,11 @@ def submitTheHive(newCase, exclusion):
 					if log_level > 0:
 						log_ts = datetime.datetime.now()
 						print('%s [WARNING] Cannot add observable %s: %s - %s (%s)' % (log_ts, o['type'], o['value'], response.status_code, response.text))
+		return {'id': str(newID), 'caseId': int(caseId) }
 	else:
 		log_ts = datetime.datetime.now()
 		print('%s [ERROR] Cannot create case: %s (%s)' % (log_ts, response.status_code, response.text))
-		return -1
-	return int(caseId)
+		return {'id': '-1', 'caseId': -1}
 
 def main():
 	global args
@@ -371,9 +371,13 @@ def main():
 
 		if thehiveAction == 'A1':
 			if thehiveNoCase:  # Valid request to create a case in TheHive
-				TheHiveCaseId = submitTheHive(otrsCase, exclusionList)
+				newCase= submitTheHive(otrsCase, exclusionList)
+				TheHiveCaseId = newCase['caseId']
+				THID = newCase['id']
 				if TheHiveCaseId > 0:
 					df = DynamicField("TheHiveCaseId", str(TheHiveCaseId))
+					client.ticket_update(TID, dynamic_fields=[df])
+					df = DynamicField("THID", THID)
 					client.ticket_update(TID, dynamic_fields=[df])
 				else:
 					log_ts = datetime.datetime.now()
