@@ -41,7 +41,7 @@ except:
 
 __author__     = "Remi Seguy"
 __license__    = "GPLv3"
-__version__    = "1.0"
+__version__    = "1.0.2"
 __maintainer__ = "Remi Seguy"
 __email__      = "remg427@gmail.com"
 __name__       = "otrs2thehive"
@@ -54,7 +54,6 @@ config = {
 	'otrsPassword'      : '',
 	'otrsTLSCheck'      : True,
 	'otrsCert'          : '',
-
 	'thehiveURL'        : '',
 	'thehiveKey'        : '',
 	'thehiveTLP'        : 'TLP:RED',
@@ -75,7 +74,70 @@ def slugify(s):
 	s = str(s).strip().replace(' ', '_')
 	return re.sub(r'(?u)[^-\w.]', '', s)
 
-def searchObservables(buffer, observables):
+def loadExclusionList(filename):
+	exclusion = []
+
+	try:
+		if not os.path.isfile(filename):
+			#invalid fillename for regex list
+			if log_level > 0:
+				log_ts = datetime.datetime.now()
+				print('%s [WARNING] file %s is not readable. no exclusion in observables based on regex' % (log_ts, filename))
+		else:
+			# open filename
+			with open(filename) as exclusion_file:
+				# collect the list of regex to exclude observables from the extracted list
+				lines = exclusion_file.read().splitlines()
+
+			i = 1
+			for l in lines:
+				if l[0] == '#' or len(l) == 0:
+					# Skip comments and empty lines
+					continue
+		
+				try:
+					re.compile(l)
+					i += 1
+					exclusion.append(l)
+				except re.error:
+					log_ts = datetime.datetime.now()
+					print('[ERROR] Line %d: Regular expression "%s" is invalid.' % (l, f))
+		
+
+			log_ts = datetime.datetime.now()
+			if log_level == 3:
+				print('%s [DEBUG] read file %s and imported %s in exclusion list' % (log_ts, filename, str(exclusion)))
+			elif log_level == 2:
+				print('%s [INFO] read file %s and imported %s strings in exclusion list' % (log_ts, filename, len(exclusion)))
+
+		return exclusion
+
+	except OSError as e:
+		log_ts = datetime.datetime.now()
+		print('%s [ERROR] Cannot read file %s: %s' % (log_ts, filename, e.errno))
+		return []
+
+	return []
+
+def excludeObservables(pattern_list, observable):
+	'''
+	Check if the provided string matches one of the whitelist regexes
+	'''
+	found = False
+	for p in pattern_list:
+		if log_level == 3:
+			log_ts = datetime.datetime.now()
+			print('%s [DEBUG] testing regex pattern %s ' % (log_ts, p))
+		if re.search(p, observable, re.IGNORECASE):
+			if log_level > 1:
+				log_ts = datetime.datetime.now()
+				print('%s [INFO] Found matching pattern %s in %s' % (log_ts, p, observable))
+			found = True
+			break
+	
+	return found
+
+def searchObservables(buffer, observables, exclusion_list = []):
 	'''
 	Search for observables in the buffer and build a list of found data
 	'''
@@ -100,52 +162,19 @@ def searchObservables(buffer, observables):
 				match = match[0]
 
 			# Bug: Avoid duplicates!
-			if not {'type': o['type'], 'value': match } in observables:
-				observables.append({ 'type': o['type'], 'value': match })
-				if log_level > 1:
-					log_ts = datetime.datetime.now()
-					print('%s [INFO] Found observable %s: %s' % (log_ts, o['type'], match))
-			else:
-				if log_level > 1:
-					log_ts = datetime.datetime.now()
-					print('%s [INFO] Ignoring duplicate observable: %s' % (log_ts, match))
-	return observables
-
-def excludeObservables(exclusion_list, observables):
-	newObservables = []
-	if log_level == 3:
-		log_ts = datetime.datetime.now()
-		print('%s [DEBUG] observable list contains %s before exclusion' % (log_ts, str(observables)))
-
-	for o in observables:
-		noMatch = True
-		if log_level == 3:
-			log_ts = datetime.datetime.now()
-			print('%s [DEBUG] Found observable type: %s and value: %s' % (log_ts, o['type'], o['value']))
-
-		for e in exclusion_list:
-			if noMatch:
-				if log_level == 3:
-					log_ts = datetime.datetime.now()
-					print('%s [DEBUG] testing regex  %s ' % (log_ts, e))
-				if re.search(e, o['value']):
+			if not excludeObservables(exclusion_list, match):
+				if not {'type': o['type'], 'value': match } in observables:
+					observables.append({ 'type': o['type'], 'value': match })
 					if log_level > 1:
 						log_ts = datetime.datetime.now()
-						print('%s [INFO] Found match on %s for value: %s, removing from observables' % (log_ts, e, o['value']))
-					noMatch = False
+						print('%s [INFO] Found observable %s: %s' % (log_ts, o['type'], match))
+				else:
+					if log_level > 1:
+						log_ts = datetime.datetime.now()
+						print('%s [INFO] Ignoring duplicate observable: %s' % (log_ts, match))
+	return observables
 
-		if noMatch:
-			newObservables.append(o)
-#		#if log_level > 1:
-#			log_ts = datetime.datetime.now()
-#			print('%s [INFO] no match for value: %s, kept in observables' % (log_ts, o['value']))
-	if log_level == 3:
-		log_ts = datetime.datetime.now()
-		print('%s [DEBUG] observable list contains %s after exclusion' % (log_ts, str(newObservables)))
-
-	return newObservables
-
-def submitTheHive(newCase):
+def submitTheHive(newCase, exclusion):
 
 	'''
 	Create a new case in TheHive based on the OTRS ticket
@@ -183,11 +212,7 @@ def submitTheHive(newCase):
 					caseDescription = caseDescription + article['Created'] + ' - '
 				caseDescription = caseDescription + 'From: ' + article['From'] + '\n\n'
 				caseDescription = caseDescription + article['Body']
-				caseObservables = searchObservables(article['Body'], caseObservables)
-		# if some observables have been found in articles, check if they have to be excluded
-		if caseObservables:
-			caseObservables = excludeObservables(exclusion, caseObservables)
-
+				caseObservables = searchObservables(article['Body'], caseObservables, exclusion)
 
 	if 'DynamicField' in newCase:
 		for DF in newCase['DynamicField']:
@@ -199,7 +224,7 @@ def submitTheHive(newCase):
 					caseTemplate = DF['Value']
 			elif DF['Name'] == config['thehiveObservable']:
 				if DF['Value']:
-					caseObservables = searchObservables(DF['Value'],caseObservables)
+					caseObservables = searchObservables(DF['Value'],caseObservables, [])
 			elif DF['Name'] == config['thehiveCustomTags']:
 				if DF['Value']:
 					for v in DF['Value'].split(','):
@@ -254,7 +279,6 @@ def main():
 	global args
 	global config
 	global log_level
-	global exclusion
 
 
 	# Collect args fom call and open log file
@@ -286,16 +310,15 @@ def main():
 		log_ts = datetime.datetime.now()
 		print('%s [ERROR] Configuration file has no option LOG_LEVEL.' % log_ts)
 
-
 	#OTRS config
-	if c.has_option('pyotrs','PYOTRS_BASEURL'):
+	if c.has_option('pyotrs','PYOTRS_BASEURL') and c.has_option('pyotrs','PYOTRS_USERNAME') and c.has_option('pyotrs','PYOTRS_PASSWORD'):
 		config['otrsURL']          = c.get('pyotrs','PYOTRS_BASEURL')
+		config['otrsUser']         = c.get('pyotrs','PYOTRS_USERNAME')
+		config['otrsPassword']     = c.get('pyotrs','PYOTRS_PASSWORD')
 	else:
 		log_ts = datetime.datetime.now()
-		print('%s [ERROR] Configuration file has no option PYOTRS_BASEURL.' % log_ts)
+		print('%s [ERROR] Configuration file misses option PYOTRS_BASEURL or PYOTRS_USERNAME or PYOTRS_PASSWORD.' % log_ts)
 
-	config['otrsUser']         = c.get('pyotrs','PYOTRS_USERNAME')
-	config['otrsPassword']     = c.get('pyotrs','PYOTRS_PASSWORD')
 	config['otrsTLSCheck']     = c.getboolean('pyotrs','PYOTRS_HTTPS_VERIFY')
 	config['otrsCert']         = c.get('pyotrs','PYOTRS_CA_CERT_BUNDLE')
 
@@ -310,38 +333,15 @@ def main():
 	config['thehiveCustomTags']= c.get('thehive', 'THEHIVE_CUSTOMTAGS_DF')
 	config['thehiveSeverity']  = eval(c.get('thehive', 'THEHIVE_SEVERITY'))
 
-	exclusion = []
+	#get list of regex to exclude observables from case.
 	exclusion_filename = ''
 	if c.has_option('thehive', 'THEHIVE_NOTOBS_REX'):
 		exclusion_filename = c.get('thehive', 'THEHIVE_NOTOBS_REX')
+		exclusionList = loadExclusionList(exclusion_filename)
 	else:
+		exclusionList = []
 		log_ts = datetime.datetime.now()
-		print('%s [ERROR] Cannot find option NOTOBS_REX in section thehive' % log_ts)
-
-	try:
-		if not os.path.isfile(exclusion_filename) and log_level > 0:
-			log_ts = datetime.datetime.now()
-			print('%s [WARNING] file %s is not readable. no exclusion in observables based on regex' % (log_ts, exclusion_filename))
-		else:
-			# open exclusion_filename
-			with open(exclusion_filename) as exclusion_file:
-				# collect the list of regex to exclude observables from the extracted list
-				exclusion = exclusion_file.read().splitlines() 
-			if log_level == 3:
-				log_ts = datetime.datetime.now()
-				print('%s [DEBUG] read file %s and imported %s in exclusion list' % (log_ts, exclusion_filename, str(exclusion)))
-			elif log_level == 2:
-				log_ts = datetime.datetime.now()
-				print('%s [INFO] read file %s and imported %s strings in exclusion list' % (log_ts, exclusion_filename, len(exclusion)))
-
-	except OSError as e:
-		log_ts = datetime.datetime.now()
-		print('%s [ERROR] Cannot read config file section NOTOBS_REX: %s' % (log_ts, e.errno))
-		sys.exit(1)
-
-
-
-
+		print('%s [ERROR] Cannot find option THEHIVE_NOTOBS_REX in section thehive' % log_ts)
 
 	try:
 		#Get OTRS ticket 
@@ -371,7 +371,7 @@ def main():
 
 		if thehiveAction == 'A1':
 			if thehiveNoCase:  # Valid request to create a case in TheHive
-				TheHiveCaseId = submitTheHive(otrsCase)
+				TheHiveCaseId = submitTheHive(otrsCase, exclusionList)
 				if TheHiveCaseId > 0:
 					df = DynamicField("TheHiveCaseId", str(TheHiveCaseId))
 					client.ticket_update(TID, dynamic_fields=[df])
